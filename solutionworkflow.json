@@ -1,0 +1,367 @@
+{
+  "name": "DESAFIO FINAL - DIO",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        -192
+      ],
+      "id": "d39ec2e5-df76-446e-80d8-e332c6d622bd",
+      "name": "Webhook",
+      "webhookId": "4c0da411-d07f-4b0f-af91-bf1b3ae01889"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1392,
+        48
+      ],
+      "id": "fe4c1955-2301-4472-a4b4-650ffde04587",
+      "name": "Respond to Webhook",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        48,
+        16
+      ],
+      "id": "0339c063-bddb-40f9-b161-5f944bbdf839",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        336,
+        -176
+      ],
+      "id": "d4aa2804-d524-4ddb-9cea-228f6eae5831",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resultados = $json.resultados || [];\n\nfunction parseBRL(valor) {\n  if (!valor) return 0;\n  const s = String(valor)\n    .replace(\"R$\", \"\")\n    .replace(/\\./g, \"\")\n    .replace(\",\", \".\")\n    .replace(/[^\\d.]/g, \"\")\n    .trim();\n  const n = Number(s);\n  return Number.isFinite(n) ? n : 0;\n}\n\n// retorna UM ITEM por cliente\nconst out = resultados.map(c => {\n  const saldoNum = c.saldo_num ?? parseBRL(c.saldo_texto ?? c.saldo);\n\n  return {\n    json: {\n      email_to: String(c.email || \"\").trim(),\n      nome: String(c.nome || \"\").trim(),\n      perfil: c.perfil,\n      saldo_texto: c.saldo_texto ?? c.saldo,\n      saldo_num: saldoNum,\n      recomendacao: c.recomendacao,\n      motivo: c.motivo,\n      mensagem_base: c.mensagem_escolhida || c.mensagem || \"\",\n      copy_rules: {\n        idioma: \"pt-BR\",\n        tom: \"amigável e profissional\",\n        tamanho: \"curto (4-6 linhas)\",\n        evitar: [\"promessas de ganho\", \"garantias\", \"linguagem agressiva\"]\n      }\n    }\n  };\n});\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        48
+      ],
+      "id": "6be7a051-0482-463c-b184-035d149b3e26",
+      "name": "Code 3 - Configurando mensagens em tabela"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Captura os dados vindos dos nós anteriores\nconst clientes = $('Merge').item.json.body?.clientes || $('Merge').item.json.clientes || [];\n\n// Busca a lista de investimentos tratada do nó \"Code in JavaScript\"\nlet investimentos = [];\ntry {\n  investimentos = $('Code 1 - Ajustando informações do perfils').first().json.investimentos || [];\n} catch (e) {\n  investimentos = [];\n}\n\n// Funções auxiliares\nfunction parseSaldo(saldoStr) {\n  if (!saldoStr) return 0;\n  return parseFloat(String(saldoStr).replace('R$', '').replace(/\\./g, '').replace(',', '.').trim());\n}\n\nfunction pick(arr) {\n  if (!Array.isArray(arr) || arr.length === 0) return '';\n  return arr[Math.floor(Math.random() * arr.length)];\n}\n\n// 2. Mapeia e cruza os dados dos clientes com os investimentos\nconst resultados = clientes.map((c) => {\n  const nome = c.nome;\n  const email = c.email;\n  const perfil = c.perfil;\n  const saldoNum = parseSaldo(c.saldo);\n\n  // Procura a opção exata conforme o gabarito do professor\n  const inv = investimentos.find((i) => {\n    const p = (i.perfil || '').trim().toLowerCase();\n    const prod = (i.produto || '').trim().toLowerCase();\n    const perfCliente = (perfil || '').trim().toLowerCase();\n    \n    if (perfCliente === 'conservador') {\n      return p === 'conservador' && prod.includes('cdb liquidez');\n    }\n    return p === perfCliente;\n  }) || {};\n\n  const recomendacao = {\n    perfil: inv.perfil || perfil,\n    produto: inv.produto || '',\n    minimo: inv.minimo ? Number(inv.minimo) : 0,\n    rentabilidade: inv.rentabilidade || ''\n  };\n\n  const motivo = 'saldo_ok';\n\n  // Formatador de valor mínimo em moeda brasileira\n  const minFormatado = recomendacao.minimo.toLocaleString('pt-BR', { minimumFractionDigits: 2 });\n  \n  // As 3 opções de frases idênticas às da aula\n  const mensagens = [\n    `Olá ${nome}! Pelo seu perfil (${perfil}), uma boa opção é **${recomendacao.produto}** (mínimo R$ ${minFormatado}). Com seu saldo atual (${c.saldo}), você já consegue investir. Rentabilidade: ${recomendacao.rentabilidade}.`,\n    `Oi ${nome}! Recomendações para perfil ${perfil}: **${recomendacao.produto}** (mínimo R$ ${minFormatado}). Seu saldo (${c.saldo}) já atende o mínimo. Rentabilidade: ${recomendacao.rentabilidade}.`,\n    `${nome}, indo direto ao ponto: para o perfil ${perfil}, **${recomendacao.produto}** (mínimo R$ ${minFormatado}). Você tem ${c.saldo}, então dá pra aplicar. Rentabilidade: ${recomendacao.rentabilidade}.`\n  ];\n\n  return {\n    nome,\n    email,\n    perfil,\n    saldo_texto: c.saldo,\n    saldo_num: saldoNum,\n    recomendacao,\n    motivo,\n    mensagens,\n    mensagem_escolhida: pick(mensagens),\n  };\n});\n\n// 3. Estrutura final de saída do nó\nreturn [{\n  json: {\n    ok: true,\n    total_clientes: resultados.length,\n    total_investimentos: investimentos.length,\n    resultados\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -176
+      ],
+      "id": "992709eb-e219-44ff-8665-3bf9da92096c",
+      "name": "Code  2 - Config. mensg ao perfil do cliente"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega o CSV como texto vindo do HTTP Request\nconst csvRaw = $json.data ?? $json.body ?? $json;\nconst text = (typeof csvRaw === \"string\") ? csvRaw : JSON.stringify(csvRaw);\n\nconst lines = text.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);\nconst headers = lines[0].split(\",\").map(h => h.trim());\n\nconst investimentos = lines.slice(1).map(line => {\n  const cols = line.split(\",\").map(c => c.trim());\n  const obj = {};\n  headers.forEach((h, i) => obj[h] = cols[i] ?? \"\");\n\n  // normaliza mínimo para número\n  obj.minimo = Number(String(obj.minimo).replace(/[^\\d]/g, \"\")) || 0;\n\n  return obj;\n});\n\nreturn [{ json: { investimentos } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        16
+      ],
+      "id": "fb508e5c-d2fc-4d65-8ce2-5ff1379eb617",
+      "name": "Code 1 - Ajustando informações do perfils"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.5-flash-lite",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.5-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Escreva um e-mail curto em pt-BR para o cliente abaixo, sem prometer ganhos e sem garantias.\n\nCliente:\nNome: {{ $json.nome }}\nPerfil: {{ $json.perfil }}\nSaldo: {{ $json.saldo_texto }}\n\nRecomendação:\nProduto: {{ $json.recomendacao.produto }}\nMínimo: {{ $json.recomendacao.minimo }}\nRentabilidade: {{ $json.recomendacao.rentabilidade }}\nMotivo: {{ $json.motivo }}\n\nRetorne APENAS JSON com:\n{\n  \"subject\": \"...\",\n  \"text_body\": \"...\",\n  \"html_body\": \"...\"\n}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        832,
+        48
+      ],
+      "id": "db5dd604-b068-4951-9c85-a2e57bbc0f1f",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "oZbryJ02FEHiVJ4X",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const code3Items = $items(\"Code 3 - Configurando mensagens em tabela\");\n\nfor (let i = 0; i < $input.all().length; i++) {\n  const item = $input.all()[i];\n\n  // 1. Pega a resposta de texto gerada pela IA\n  let responseText = item.json.content?.parts?.[0]?.text || item.json.text || \"\";\n\n  // 2. Remove marcações Markdown\n  responseText = responseText.replace(/```json/g, \"\").replace(/```/g, \"\").trim();\n\n  // 3. Converte o JSON retornado pela IA\n  let parsedEmail = {};\n  try {\n    parsedEmail = JSON.parse(responseText);\n  } catch (e) {\n    parsedEmail = {\n      subject: \"Oportunidade de Investimento\",\n      text_body: responseText,\n      html_body: `<p>${responseText}</p>`\n    };\n  }\n\n  // 4. Busca o email_to correspondente ao mesmo índice no Code 3\n  const emailDestinatario = item.json.email_to || item.json.email || code3Items[i]?.json?.email_to || \"\";\n\n  // 5. Preenche e padroniza a saída\n  item.json.email_to = emailDestinatario;\n  item.json.subject = parsedEmail.subject || \"\";\n  item.json.text_body = parsedEmail.text_body || \"\";\n  item.json.html_body = parsedEmail.html_body || \"\";\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        -176
+      ],
+      "id": "14efa710-5c52-4235-b829-14adebdd078d",
+      "name": "Code 4 - Ajustando e padronizando e-mails"
+    },
+    {
+      "parameters": {
+        "content": "*_PROJETO REALIZADO POR LUCI 💛🌟_*\n\n*ETAPA 1 - :) | ESTRUTURANDO O MVP COM COLAB E WEBHOOK.*\n\n*ETAPA 2 - ;) | CRIANDO UM PROCESSODE RPA COM N7N E PYTON*\n\n*ETAPA 3 - :D | HTTP + CODE + MERGE: INTEGRANDO O FLUXO DO MVP*\n\n*ETAPA 4 - :P | CODE + RECAPITULAÇÃO: INTEGRAÇÃO DOS AGENTES DE IA*\n\n*ETAPA 5 -  😎 | BRIEFING EMAIL - LLMM: AUTOMAÇÃO DE E-MAILS COM IA*\n\n*ETAPA 6 - <3 🎉✨ | GMAIL FINAL: VALIDANDO E AUTOMATIZANNDO EMAILS*",
+        "height": 336,
+        "width": 640,
+        "color": "#FFD1F7"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        384,
+        -576
+      ],
+      "id": "54047ecc-7373-4820-a1a8-99130cad6148",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email_to }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        48
+      ],
+      "id": "4a7bc76a-b298-467d-83b0-25f4e0558156",
+      "name": "Send a message",
+      "webhookId": "ef3dd5b1-5595-45fc-b518-10d704226e7f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "07mKwpB6dHCECTos",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f765b5bf-f1f0-4d47-8146-2644f6e59a68",
+              "leftValue": "={{ $json.email_to }}",
+              "rightValue": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1152,
+        -176
+      ],
+      "id": "cb136573-4df0-448f-abf7-6fafe287a7d1",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code 1 - Ajustando informações do perfils",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code  2 - Config. mensg ao perfil do cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code 3 - Configurando mensagens em tabela": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code  2 - Config. mensg ao perfil do cliente": {
+      "main": [
+        [
+          {
+            "node": "Code 3 - Configurando mensagens em tabela",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code 1 - Ajustando informações do perfils": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code 4 - Ajustando e padronizando e-mails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code 4 - Ajustando e padronizando e-mails": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": -1
+  },
+  "versionId": "5de38f30-c3b8-44a7-943a-bf7c0b6b5b86",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "88a88580cb35a3c364dbd1bd49dc1cf5ec619a4ec94cdc53db5aa487fc5dd9d7"
+  },
+  "nodeGroups": [],
+  "id": "u2gpmiMka9ZmhR0W",
+  "tags": []
+}
