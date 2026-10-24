@@ -60,7 +60,7 @@ O objetivo principal deste pipeline é automatizar a coleta de dados de clientes
 │   └── data.csv                 # Base com as opções de investimento por perfil
 ├── rpa/
 │   └── extrair_clientes.ipynb   # Notebook Python RPA integrado ao Webhook
-├── workflowjson/
+├── n8n/
 │   └── workflow.json            # Workflow exportado do n8n
 ├── SOLUTION.md                  # Documentação completa da solução
 └── README.md                    # Instruções originais do repositório
